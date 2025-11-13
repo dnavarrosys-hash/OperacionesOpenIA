@@ -32,10 +32,6 @@
       padding: 0;
     }
 
-    html {
-      scroll-behavior: smooth;
-    }
-
     body {
       font-family: 'Inter', system-ui, sans-serif;
       background-color: var(--color-bg);
@@ -84,13 +80,11 @@
     }
 
     input#expr {
-      font-family: 'Inter', system-ui, sans-serif;
       padding: 14px;
       font-size: 16px;
       border: 1px solid var(--color-border);
       border-radius: var(--radius);
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      width: 100%;
     }
 
     input#expr:focus {
@@ -100,7 +94,6 @@
     }
 
     button[type="submit"] {
-      font-family: 'Inter', system-ui, sans-serif;
       background-color: var(--color-primary);
       color: white;
       border: none;
@@ -126,19 +119,18 @@
       opacity: 0.7;
     }
 
-    /* 4. Mensajes de Estado */
+    /* 4. Mensajes de Estado (para 'Loading' y 'Error') */
     .msg {
       margin-top: 16px;
       padding: 12px;
       border-radius: var(--radius);
       font-weight: 500;
       text-align: center;
-      /* Oculto por defecto hasta que JS le añada una clase */
-      display: none; 
+      display: none; /* Oculto por defecto */
     }
     
-    .msg.loading, .msg.success, .msg.error {
-      display: block; /* Mostrar cuando tenga estado */
+    .msg.loading, .msg.error {
+      display: block; /* Mostrar solo si es loading o error */
     }
 
     .msg.loading {
@@ -147,25 +139,114 @@
       border: 1px solid #ced4da;
     }
     
-    .msg.success {
-      background-color: #e6f6e9;
-      color: var(--color-success);
-      border: 1px solid #b8e6c3;
-    }
-    
     .msg.error {
       background-color: #fbebee;
       color: var(--color-error);
       border: 1px solid #f5c6cb;
     }
 
+    /* 5. Estilos del Modal */
+    .modal-overlay {
+      display: none; /* Oculto por defecto */
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal {
+      display: none; /* Oculto por defecto */
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.9);
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      z-index: 101;
+      width: 90%;
+      max-width: 500px;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    /* Clases 'visible' para activar con JS */
+    .modal-overlay.visible,
+    .modal.visible {
+      display: block;
+      opacity: 1;
+    }
+    .modal.visible {
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .modal-header h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--color-primary);
+    }
+
+    .modal-close {
+      font-size: 2rem;
+      font-weight: 300;
+      line-height: 1;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--color-text-light);
+      padding: 0;
+    }
+    .modal-close:hover {
+      color: var(--color-error);
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+    }
+    
+    .modal-body ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    .modal-body li {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--color-bg);
+      gap: 1rem;
+    }
+    .modal-body li:last-child {
+      border-bottom: none;
+    }
+    .modal-body li strong {
+      color: var(--color-text-light);
+      white-space: nowrap;
+    }
+    .modal-body li span {
+      font-weight: 500;
+      text-align: right;
+      word-break: break-word; /* Para IPs o ciudades largas */
+    }
+    
   </style>
 </head>
 <body>
 
   <main class="container">
     <h1>Resolver operación con n8n + OpenAI</h1>
-    <p>Ejemplos: <code>(2+3)*4</code>, <code>5^3 - (6/2)</code>, <code>2*(3+4)^2</code></p>
 
     <form id="opForm">
       <input id="expr" name="expr" placeholder="Escribe tu operación..." required />
@@ -175,13 +256,43 @@
     <div class="msg" id="msg"></div>
   </main>
 
+  <div id="modalOverlay" class="modal-overlay"></div>
+  <div id="modal" class="modal">
+    <div class="modal-header">
+      <h2>Resultado de la Operación</h2>
+      <button id="closeModal" class="modal-close">&times;</button>
+    </div>
+    <div id="modalBody" class="modal-body">
+      </div>
+  </div>
+
+
   <script>
-    // 🔗 Usa el path del Webhook del workflow nuevo
-    // (en tu caso, el webhook del JSON que hicimos es: path = "ai-operation")
+    // 🔗 Usa el path del Webhook
     const WEBHOOK_URL = "https://daniela-navarro.app.n8n.cloud/webhook/ai-operation";
 
+    // === SELECTORES DE ELEMENTOS ===
+    const opForm = document.getElementById("opForm");
+    const msg = document.getElementById("msg");
+    const button = document.getElementById("submitButton");
+    
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modal = document.getElementById("modal");
+    const modalBody = document.getElementById("modalBody");
+    const closeModal = document.getElementById("closeModal");
+
+    // === FUNCIONES DEL MODAL ===
+    function hideModal() {
+      modalOverlay.classList.remove("visible");
+      modal.classList.remove("visible");
+    }
+
+    // Asignar eventos para cerrar el modal
+    closeModal.addEventListener("click", hideModal);
+    modalOverlay.addEventListener("click", hideModal);
+
+    // === FUNCIONES DE FETCH ===
     async function getClientIP() {
-      // ipify: devuelve { ip: "x.x.x.x" }
       const r = await fetch("https://api.ipify.org?format=json");
       if (!r.ok) throw new Error("No se pudo obtener IP pública");
       return (await r.json()).ip;
@@ -189,21 +300,17 @@
 
     async function submitData(expr) {
       const client_ip = await getClientIP();
-
       const payload = {
-        // el workflow espera principalmente `exp`, pero igual acepta expr
-        exp: expr,            // operación aritmética tal cual la escribió el usuario
-        client_ip,            // IP pública detectada en el navegador
+        exp: expr,
+        client_ip,
         user_agent: navigator.userAgent
       };
-
       const r = await fetch(WEBHOOK_URL, {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-
       if (!r.ok) {
         const t = await r.text().catch(() => "");
         throw new Error("Webhook error: " + r.status + " " + t);
@@ -211,42 +318,62 @@
       return r.json();
     }
 
-    document.getElementById("opForm").addEventListener("submit", async (e) => {
+    // === EVENT LISTENER PRINCIPAL ===
+    opForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       
-      const msg = document.getElementById("msg");
-      const button = document.getElementById("submitButton");
-      
-      // === INICIO: CAMBIO VISUAL ===
-      // Limpiamos clases y ponemos estado "loading"
+      // 1. Poner estado "loading"
       msg.className = 'msg loading'; 
       msg.textContent = "Procesando operación…";
       button.disabled = true;
-      // === FIN: CAMBIO VISUAL ===
+      hideModal(); // Ocultar modal si estaba abierto
 
       try {
         const expr = document.getElementById("expr").value.trim();
-        const data = await submitData(expr);
+        const data = await submitData(expr); // data ahora es un OBJETO: {...}
 
-        const resultado = data?.result ?? data?.resultado ?? "S/R";
-        const tipo = data?.op_type ?? data?.operation_label ?? "?";
-        const ciudad = data?.city ?? data?.ciudad ?? "N/D";
+        // 2. VALIDAR Y PARSEAR LA RESPUESTA
+        // ======================= INICIO DEL CAMBIO =======================
+        // Validamos que sea un objeto, pero NO un array
+        if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+          throw new Error("Respuesta inesperada del servidor (no es un objeto).");
+        }
+        
+        // Usamos 'data' directamente, ya no es 'data[0]'
+        const resultData = data; 
+        // ======================= FIN DEL CAMBIO =======================
+        
+        // Extraemos datos usando las claves EXACTAS de tu JSON
+        const resultado = resultData["Resultado"] ?? "S/R";
+        const tipo = resultData["Operación aritmética"] ?? "?";
+        const ciudad = resultData["Ciudad del cliente"] ?? "N/D";
+        const ip = resultData["IP Pública"] ?? "N/D";
+        const fecha = resultData["Fecha y hora del cliente"] ?? "N/D";
 
-        // === INICIO: CAMBIO VISUAL (ÉXITO) ===
-        msg.className = 'msg success';
-        msg.textContent = `Resultado: ${resultado} · Tipo: ${tipo} · Ciudad: ${ciudad}`;
-        // === FIN: CAMBIO VISUAL (ÉXITO) ===
+        // 3. CONSTRUIR EL HTML DEL MODAL
+        modalBody.innerHTML = `
+          <ul>
+            <li><strong>Resultado:</strong> <span>${resultado}</span></li>
+            <li><strong>Tipo:</strong> <span>${tipo}</span></li>
+            <li><strong>Ciudad:</strong> <span>${ciudad}</span></li>
+            <li><strong>IP Pública:</strong> <span>${ip}</span></li>
+            <li><strong>Fecha:</strong> <span>${fecha}</span></li>
+          </ul>
+        `;
+
+        // 4. MOSTRAR EL MODAL Y QUITAR "LOADING"
+        msg.className = 'msg'; // Ocultar mensaje de "loading"
+        msg.textContent = "";
+        modalOverlay.classList.add("visible");
+        modal.classList.add("visible");
 
       } catch (err) {
-        // === INICIO: CAMBIO VISUAL (ERROR) ===
+        // 5. MANEJAR ERROR
         msg.className = 'msg error';
         msg.textContent = "Error: " + err.message;
-        // === FIN: CAMBIO VISUAL (ERROR) ===
       } finally {
-        // === INICIO: CAMBIO VISUAL (FINAL) ===
-        // Reactivamos el botón pase lo que pase
+        // 6. REACTIVAR BOTÓN
         button.disabled = false;
-        // === FIN: CAMBIO VISUAL (FINAL) ===
       }
     });
   </script>
