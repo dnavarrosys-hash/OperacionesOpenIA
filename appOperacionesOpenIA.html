@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora Aritmética con n8n</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de fuente Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Aplicar la fuente Inter como fuente principal */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 min-h-screen flex items-center justify-center text-white p-4">
+
+    <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-700">
+        
+        <h1 class="text-3xl font-bold text-center mb-3 text-blue-400">Calculadora Aritmética</h1>
+        <p class="text-gray-400 text-center mb-8">
+            Ingresa una operación en lenguaje natural (ej. "cuánto es 5 más 10 por 2") y la registraremos.
+        </p>
+
+        <div class="space-y-6">
+            <div>
+                <label for="operacionInput" class="block text-sm font-medium text-gray-300 mb-2">Operación Aritmética:</label>
+                <input 
+                    type="text" 
+                    id="operacionInput" 
+                    placeholder="Ej: (100 / 5) + 30"
+                    class="w-full p-4 bg-gray-700 rounded-lg border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none text-white placeholder-gray-500"
+                >
+            </div>
+            
+            <button 
+                id="submitButton" 
+                class="w-full p-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold text-lg transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                Calcular y Registrar
+            </button>
+        </div>
+
+        <!-- Área para mostrar mensajes de estado -->
+        <div id="messageArea" class="mt-6 text-center text-sm min-h-[1.25rem]">
+            <!-- Ej: "Calculando...", "¡Operación registrada!", "Error." -->
+        </div>
+
+    </div>
+
+    <script>
+        // --- ¡IMPORTANTE! ---
+        // Pega aquí la URL de "Production" de tu nodo Webhook de n8n.
+        const WEBHOOK_URL = 'TU_URL_DE_WEBHOOK_PRODUCTION_AQUI'; 
+        // ---------------------
+
+        // Obtener los elementos del DOM
+        const operacionInput = document.getElementById('operacionInput');
+        const submitButton = document.getElementById('submitButton');
+        const messageArea = document.getElementById('messageArea');
+
+        // Escuchar el clic en el botón
+        submitButton.addEventListener('click', async () => {
+            const operacion = operacionInput.value;
+
+            // 1. Validar que la entrada no esté vacía
+            if (!operacion) {
+                messageArea.textContent = 'Por favor, ingresa una operación.';
+                messageArea.className = 'mt-6 text-center text-sm text-red-400';
+                return;
+            }
+
+            // 2. Generar el timestamp en el formato del cliente
+            const timestamp = new Date().toLocaleString('es-MX', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            // 3. Deshabilitar el botón y mostrar estado "cargando"
+            submitButton.disabled = true;
+            submitButton.textContent = 'Calculando...';
+            messageArea.textContent = 'Enviando a n8n...';
+            messageArea.className = 'mt-6 text-center text-sm text-blue-400';
+
+            try {
+                // 4. Enviar los datos al webhook de n8n
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        operacion: operacion,
+                        timestamp: timestamp
+                    })
+                });
+
+                if (!response.ok) {
+                    // Si la respuesta de n8n no es 2xx
+                    throw new Error(`Error del Webhook: ${response.statusText}`);
+                }
+
+                // 5. Éxito: Mostrar mensaje y limpiar
+                messageArea.textContent = '¡Operación registrada con éxito!';
+                messageArea.className = 'mt-6 text-center text-sm text-green-400';
+                operacionInput.value = ''; // Limpiar el campo de texto
+
+            } catch (error) {
+                // 6. Error: Mostrar mensaje de error
+                console.error('Error al enviar al webhook:', error);
+                messageArea.textContent = 'Hubo un error al registrar. Intenta de nuevo.';
+                messageArea.className = 'mt-6 text-center text-sm text-red-400';
+            
+            } finally {
+                // 7. Vuelva a habilitar el botón en cualquier caso
+                submitButton.disabled = false;
+                submitButton.textContent = 'Calcular y Registrar';
+            }
+        });
+    </script>
+
+</body>
+</html>
